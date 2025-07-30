@@ -30,7 +30,32 @@ const initialState = {
       maxAdvanceBooking: 60,
       active: true,
       questions: [
-        { id: '1', question: 'What would you like to discuss?', required: true, type: 'textarea' }
+        {
+          id: '1',
+          question: 'What would you like to discuss?',
+          required: true,
+          type: 'textarea'
+        }
+      ]
+    },
+    {
+      id: '3',
+      name: 'Phone Consultation',
+      duration: 30,
+      description: 'Quick telephone consultation',
+      color: '#F59E0B',
+      meetingPlatform: 'phone',
+      bufferTime: { before: 5, after: 5 },
+      advanceNotice: 60,
+      maxAdvanceBooking: 30,
+      active: true,
+      questions: [
+        {
+          id: '1',
+          question: 'What topics would you like to cover?',
+          required: true,
+          type: 'textarea'
+        }
       ]
     }
   ],
@@ -76,53 +101,45 @@ function schedulingReducer(state, action) {
         ...state,
         meetingTypes: [...state.meetingTypes, { ...action.payload, id: uuidv4() }]
       };
-    
     case 'UPDATE_MEETING_TYPE':
       return {
         ...state,
-        meetingTypes: state.meetingTypes.map(mt => 
+        meetingTypes: state.meetingTypes.map(mt =>
           mt.id === action.payload.id ? { ...mt, ...action.payload } : mt
         )
       };
-    
     case 'DELETE_MEETING_TYPE':
       return {
         ...state,
         meetingTypes: state.meetingTypes.filter(mt => mt.id !== action.payload)
       };
-    
     case 'ADD_RULE':
       return {
         ...state,
         rules: [...state.rules, { ...action.payload, id: uuidv4() }]
       };
-    
     case 'UPDATE_RULE':
       return {
         ...state,
-        rules: state.rules.map(rule => 
+        rules: state.rules.map(rule =>
           rule.id === action.payload.id ? { ...rule, ...action.payload } : rule
         )
       };
-    
     case 'DELETE_RULE':
       return {
         ...state,
         rules: state.rules.filter(rule => rule.id !== action.payload)
       };
-    
     case 'ADD_BOOKING':
       return {
         ...state,
         bookings: [...state.bookings, { ...action.payload, id: uuidv4() }]
       };
-    
     case 'UPDATE_SETTINGS':
       return {
         ...state,
         settings: { ...state.settings, ...action.payload }
       };
-    
     default:
       return state;
   }
@@ -136,10 +153,7 @@ export function SchedulingProvider({ children }) {
     try {
       // Simulate Google Calendar OAuth flow
       console.log('Connecting to Google Calendar...');
-      dispatch({
-        type: 'UPDATE_SETTINGS',
-        payload: { googleCalendarConnected: true }
-      });
+      dispatch({ type: 'UPDATE_SETTINGS', payload: { googleCalendarConnected: true } });
       return true;
     } catch (error) {
       console.error('Failed to connect Google Calendar:', error);
@@ -162,7 +176,7 @@ export function SchedulingProvider({ children }) {
     // Complex availability checking logic
     const rules = state.rules.filter(rule => rule.active);
     const meetingType = state.meetingTypes.find(mt => mt.id === meetingTypeId);
-    
+
     // Check business hours
     const businessHoursRule = rules.find(rule => rule.type === 'availability');
     if (businessHoursRule) {
@@ -171,7 +185,7 @@ export function SchedulingProvider({ children }) {
         return false;
       }
     }
-    
+
     // Check buffer times
     const bufferRule = rules.find(rule => rule.type === 'buffer');
     if (bufferRule && meetingType) {
@@ -181,12 +195,12 @@ export function SchedulingProvider({ children }) {
         const timeDiff = Math.abs(date - bookingDate) / (1000 * 60); // minutes
         return timeDiff < (bufferRule.conditions.minBuffer + duration);
       });
-      
+
       if (conflicts.length > 0) {
         return false;
       }
     }
-    
+
     return true;
   };
 

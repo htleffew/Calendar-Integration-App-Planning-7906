@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useScheduling } from '../context/SchedulingContext';
+import { useAuth } from '../context/AuthContext';
+import ProfileSettings from '../components/ProfileSettings';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiCheck, FiX, FiClock, FiGlobe, FiMail, FiSmartphone, FiVideo, FiCalendar, FiLink } = FiIcons;
+const { FiCheck, FiX, FiClock, FiGlobe, FiMail, FiSmartphone, FiVideo, FiCalendar, FiLink, FiUser } = FiIcons;
 
 function Settings() {
   const { settings, dispatch, connectGoogleCalendar } = useScheduling();
-  const [activeTab, setActiveTab] = useState('general');
+  const { user, profile } = useAuth();
+  const [activeTab, setActiveTab] = useState('profile');
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // Check if we should switch to a specific tab from dashboard navigation
+  useEffect(() => {
+    const tabToActivate = sessionStorage.getItem('settingsActiveTab');
+    if (tabToActivate) {
+      setActiveTab(tabToActivate);
+      sessionStorage.removeItem('settingsActiveTab');
+    }
+  }, []);
+
   const tabs = [
+    { id: 'profile', name: 'Profile', icon: FiUser },
     { id: 'general', name: 'General', icon: FiClock },
     { id: 'calendar', name: 'Calendar', icon: FiCalendar },
     { id: 'notifications', name: 'Notifications', icon: FiMail },
@@ -29,10 +42,7 @@ function Settings() {
     dispatch({
       type: 'UPDATE_SETTINGS',
       payload: {
-        [parent]: {
-          ...settings[parent],
-          [key]: value
-        }
+        [parent]: { ...settings[parent], [key]: value }
       }
     });
   };
@@ -48,12 +58,14 @@ function Settings() {
     }
   };
 
+  const renderProfileSettings = () => (
+    <ProfileSettings />
+  );
+
   const renderGeneralSettings = () => (
     <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Default Timezone
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Default Timezone</label>
         <select
           value={settings.timezone}
           onChange={(e) => handleSettingChange('timezone', e.target.value)}
@@ -71,9 +83,7 @@ function Settings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Default Meeting Platform
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Default Meeting Platform</label>
         <select
           value={settings.defaultMeetingPlatform}
           onChange={(e) => handleSettingChange('defaultMeetingPlatform', e.target.value)}
@@ -88,9 +98,7 @@ function Settings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Date Format
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Date Format</label>
         <select
           value={settings.dateFormat || 'MM/dd/yyyy'}
           onChange={(e) => handleSettingChange('dateFormat', e.target.value)}
@@ -103,9 +111,7 @@ function Settings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Time Format
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Time Format</label>
         <select
           value={settings.timeFormat || '12h'}
           onChange={(e) => handleSettingChange('timeFormat', e.target.value)}
@@ -123,27 +129,16 @@ function Settings() {
       <div className="bg-gray-50 rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-              settings.googleCalendarConnected ? 'bg-green-100' : 'bg-gray-100'
-            }`}>
-              <SafeIcon 
-                icon={settings.googleCalendarConnected ? FiCheck : FiCalendar} 
-                className={`w-6 h-6 ${
-                  settings.googleCalendarConnected ? 'text-green-600' : 'text-gray-400'
-                }`} 
-              />
+            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${settings.googleCalendarConnected ? 'bg-green-100' : 'bg-gray-100'}`}>
+              <SafeIcon icon={settings.googleCalendarConnected ? FiCheck : FiCalendar} className={`w-6 h-6 ${settings.googleCalendarConnected ? 'text-green-600' : 'text-gray-400'}`} />
             </div>
             <div>
               <h3 className="text-lg font-medium text-gray-900">Google Calendar</h3>
               <p className="text-sm text-gray-500">
-                {settings.googleCalendarConnected 
-                  ? 'Connected and syncing' 
-                  : 'Connect to sync meetings with your Google Calendar'
-                }
+                {settings.googleCalendarConnected ? 'Connected and syncing' : 'Connect to sync meetings with your Google Calendar'}
               </p>
             </div>
           </div>
-          
           {settings.googleCalendarConnected ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -170,9 +165,7 @@ function Settings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Calendar Sync Options
-        </label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Calendar Sync Options</label>
         <div className="space-y-3">
           <label className="flex items-center">
             <input
@@ -372,6 +365,8 @@ function Settings() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'profile':
+        return renderProfileSettings();
       case 'general':
         return renderGeneralSettings();
       case 'calendar':
@@ -381,7 +376,7 @@ function Settings() {
       case 'integrations':
         return renderIntegrationSettings();
       default:
-        return renderGeneralSettings();
+        return renderProfileSettings();
     }
   };
 
@@ -401,14 +396,12 @@ function Settings() {
           {/* Sidebar */}
           <div className="lg:w-64">
             <nav className="space-y-2">
-              {tabs.map(tab => (
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
+                    activeTab === tab.id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   <SafeIcon icon={tab.icon} className="w-5 h-5" />
@@ -428,7 +421,7 @@ function Settings() {
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-8"
             >
               <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                {tabs.find(tab => tab.id === activeTab)?.name}
+                {tabs.find((tab) => tab.id === activeTab)?.name}
               </h2>
               {renderTabContent()}
             </motion.div>

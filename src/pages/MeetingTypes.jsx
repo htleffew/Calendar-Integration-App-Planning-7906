@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useScheduling } from '../context/SchedulingContext';
 import MeetingTypeForm from '../components/MeetingTypeForm';
@@ -11,6 +11,15 @@ function MeetingTypes() {
   const { meetingTypes, dispatch } = useScheduling();
   const [showForm, setShowForm] = useState(false);
   const [editingType, setEditingType] = useState(null);
+
+  // Check if form should be opened automatically from dashboard navigation
+  useEffect(() => {
+    const shouldOpenForm = sessionStorage.getItem('openMeetingTypeForm');
+    if (shouldOpenForm === 'true') {
+      setShowForm(true);
+      sessionStorage.removeItem('openMeetingTypeForm');
+    }
+  }, []);
 
   const handleEdit = (meetingType) => {
     setEditingType(meetingType);
@@ -32,15 +41,9 @@ function MeetingTypes() {
 
   const handleFormSubmit = (data) => {
     if (editingType) {
-      dispatch({
-        type: 'UPDATE_MEETING_TYPE',
-        payload: { ...editingType, ...data }
-      });
+      dispatch({ type: 'UPDATE_MEETING_TYPE', payload: { ...editingType, ...data } });
     } else {
-      dispatch({
-        type: 'ADD_MEETING_TYPE',
-        payload: data
-      });
+      dispatch({ type: 'ADD_MEETING_TYPE', payload: data });
     }
     setShowForm(false);
     setEditingType(null);
@@ -56,7 +59,9 @@ function MeetingTypes() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Meeting Types</h1>
-            <p className="text-gray-600 mt-2">Configure different types of meetings with custom durations and rules.</p>
+            <p className="text-gray-600 mt-2">
+              Configure different types of meetings with custom durations and rules.
+            </p>
           </div>
           <motion.button
             whileHover={{ scale: 1.05 }}
@@ -98,9 +103,7 @@ function MeetingTypes() {
                   />
                 </button>
               </div>
-
               <p className="text-gray-600 mb-4">{meetingType.description}</p>
-
               <div className="space-y-3 mb-6">
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <SafeIcon icon={FiClock} className="w-4 h-4" />
@@ -111,7 +114,6 @@ function MeetingTypes() {
                   <span className="capitalize">{meetingType.meetingPlatform.replace('-', ' ')}</span>
                 </div>
               </div>
-
               <div className="flex items-center space-x-2">
                 <motion.button
                   whileHover={{ scale: 1.05 }}

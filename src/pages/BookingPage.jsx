@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, addDays, startOfDay, isSameDay, isAfter, isBefore } from 'date-fns';
+import { format, addDays, startOfDay, isSameDay, isAfter, isBefore, addMinutes } from 'date-fns';
 import { useScheduling } from '../context/SchedulingContext';
 import SafeIcon from '../common/SafeIcon';
+import FlexibleBookingForm from '../components/FlexibleBookingForm';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiCalendar, FiClock, FiUser, FiMail, FiPhone, FiMessageSquare, FiCheck, FiChevronLeft, FiChevronRight } = FiIcons;
+const { FiCalendar, FiClock, FiUser, FiMail, FiPhone, FiVideo, FiMessageSquare, FiCheck, FiChevronLeft, FiChevronRight, FiSliders } = FiIcons;
 
 function BookingPage() {
   const { meetingTypeId } = useParams();
@@ -23,10 +24,27 @@ function BookingPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentWeek, setCurrentWeek] = useState(startOfDay(new Date()));
+  const [showFlexibleForm, setShowFlexibleForm] = useState(false);
+  const [customDuration, setCustomDuration] = useState(30);
+  const [customMeetingType, setCustomMeetingType] = useState('google-meet');
+  const [timePreference, setTimePreference] = useState('any');
+  const [dayPreferences, setDayPreferences] = useState(null);
+  const [showNextAvailable, setShowNextAvailable] = useState(false);
 
-  const meetingType = meetingTypes.find(mt => mt.id === meetingTypeId);
+  // Get the meeting type from the URL param or use a default for custom booking
+  const meetingType = meetingTypeId ? meetingTypes.find(mt => mt.id === meetingTypeId) : {
+    id: 'custom',
+    name: 'Custom Meeting',
+    duration: customDuration,
+    description: 'Customized meeting based on your preferences',
+    color: '#3B82F6',
+    meetingPlatform: customMeetingType,
+    active: true,
+    questions: []
+  };
 
-  if (!meetingType || !meetingType.active) {
+  // If using a predefined meeting type and it's not active, redirect
+  if (meetingTypeId && (!meetingType || !meetingType.active)) {
     return <Navigate to="/" replace />;
   }
 
@@ -36,20 +54,23 @@ function BookingPage() {
     const startTime = 9; // 9 AM
     const endTime = 17; // 5 PM
     const duration = meetingType.duration;
-    const interval = 30; // 30-minute intervals
+    const interval = 15; // 15-minute intervals for more granularity
 
     for (let hour = startTime; hour < endTime; hour++) {
       for (let minute = 0; minute < 60; minute += interval) {
         const slotTime = new Date(date);
         slotTime.setHours(hour, minute, 0, 0);
+
+        // Skip slots that don't match time preference
+        if (timePreference === 'morning' && hour >= 12) continue;
+        if (timePreference === 'afternoon' && hour < 12) continue;
         
         // Check if slot fits within business hours
         const slotEnd = new Date(slotTime);
         slotEnd.setMinutes(slotEnd.getMinutes() + duration);
-        
+
         if (slotEnd.getHours() <= endTime) {
-          const isAvailable = checkAvailability(slotTime, duration, meetingTypeId);
-          
+          const isAvailable = checkAvailability(slotTime, duration, meetingTypeId || 'custom');
           slots.push({
             time: slotTime,
             available: isAvailable,
@@ -58,13 +79,24 @@ function BookingPage() {
         }
       }
     }
-    
+
     return slots;
   };
 
   const handleDateSelect = (date) => {
     setSelectedDate(date);
     setSelectedTime(null);
+    
+    // If show next available is active, auto-select the first available time
+    if (showNextAvailable) {
+      const slots = generateTimeSlots(date);
+      const nextSlot = slots.find(slot => slot.available);
+      if (nextSlot) {
+        setSelectedTime(nextSlot.time);
+        // Automatically move to the next step
+        setTimeout(() => setStep('details'), 500);
+      }
+    }
   };
 
   const handleTimeSelect = (time) => {
@@ -72,36 +104,29 @@ function BookingPage() {
   };
 
   const handleFormChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleAnswerChange = (questionId, answer) => {
-    setFormData(prev => ({
-      ...prev,
-      answers: {
-        ...prev.answers,
-        [questionId]: answer
-      }
-    }));
+    setFormData(prev => ({ ...prev, answers: { ...prev.answers, [questionId]: answer } }));
   };
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
     try {
-      // Create Google Meet link
-      const meetLink = await createGoogleMeetLink({
-        title: `${meetingType.name} with ${formData.guestName}`,
-        startTime: selectedTime,
-        duration: meetingType.duration
-      });
+      // Create meeting link based on the meeting type
+      let meetLink = '';
+      if (customMeetingType === 'google-meet' || meetingType.meetingPlatform === 'google-meet') {
+        meetLink = await createGoogleMeetLink({
+          title: `${meetingType.name} with ${formData.guestName}`,
+          startTime: selectedTime,
+          duration: meetingType.duration
+        });
+      }
 
       // Create booking
       const booking = {
-        meetingTypeId,
+        meetingTypeId: meetingTypeId || 'custom',
         guestName: formData.guestName,
         guestEmail: formData.guestEmail,
         guestPhone: formData.guestPhone,
@@ -110,6 +135,7 @@ function BookingPage() {
         time: format(selectedTime, 'h:mm a'),
         duration: meetingType.duration,
         meetLink,
+        meetingPlatform: customMeetingType || meetingType.meetingPlatform,
         notes: formData.notes,
         status: 'confirmed',
         answers: Object.entries(formData.answers).map(([questionId, answer]) => {
@@ -138,11 +164,101 @@ function BookingPage() {
     setCurrentWeek(addDays(currentWeek, -7));
   };
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i));
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const day = addDays(currentWeek, i);
+    // If day preferences are set, check if this day is allowed
+    if (dayPreferences && dayPreferences.length > 0) {
+      const dayName = format(day, 'EEEE').toLowerCase();
+      return {
+        date: day,
+        enabled: dayPreferences.includes(dayName)
+      };
+    }
+    return { date: day, enabled: true };
+  });
+
   const timeSlots = selectedDate ? generateTimeSlots(selectedDate) : [];
+
+  const handleFlexibleBookingSubmit = (data) => {
+    // Update the booking parameters based on the flexible form inputs
+    setCustomDuration(data.duration);
+    setCustomMeetingType(data.meetingType);
+    setTimePreference(data.timePreference);
+    setDayPreferences(data.dayPreferences);
+    setShowNextAvailable(data.nextAvailable);
+    setShowFlexibleForm(false);
+    
+    // Reset current selections to apply new filters
+    setSelectedTime(null);
+    
+    // If the user wants to see the next available slot, find it
+    if (data.nextAvailable) {
+      findNextAvailableSlot(data.duration, data.timePreference, data.dayPreferences);
+    }
+  };
+
+  const findNextAvailableSlot = (duration, timePreference, dayPreferences) => {
+    // Start from today
+    let currentDay = startOfDay(new Date());
+    let foundSlot = false;
+    let attempts = 0;
+    const maxAttempts = 14; // Look up to 2 weeks ahead
+    
+    while (!foundSlot && attempts < maxAttempts) {
+      // Check if this day matches day preferences
+      const dayName = format(currentDay, 'EEEE').toLowerCase();
+      const isDayAllowed = !dayPreferences || dayPreferences.includes(dayName);
+      
+      if (isDayAllowed) {
+        // Generate slots for this day with the specified duration
+        const meetingTypeCopy = { ...meetingType, duration };
+        const slots = generateTimeSlots(currentDay);
+        
+        // Find the first available slot that matches time preference
+        const availableSlot = slots.find(slot => {
+          if (!slot.available) return false;
+          
+          const hour = slot.time.getHours();
+          if (timePreference === 'morning' && hour >= 12) return false;
+          if (timePreference === 'afternoon' && hour < 12) return false;
+          
+          return true;
+        });
+        
+        if (availableSlot) {
+          setSelectedDate(currentDay);
+          setSelectedTime(availableSlot.time);
+          foundSlot = true;
+          setStep('details');
+          return;
+        }
+      }
+      
+      // Move to next day
+      currentDay = addDays(currentDay, 1);
+      attempts++;
+    }
+    
+    // If we couldn't find a slot, reset to the selection page
+    alert("No available slots found within the next two weeks that match your preferences.");
+    setSelectedDate(startOfDay(new Date()));
+  };
 
   const renderDateTimeStep = () => (
     <div className="space-y-8">
+      {/* Custom Booking Option */}
+      <div className="flex justify-end">
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowFlexibleForm(true)}
+          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <SafeIcon icon={FiSliders} className="w-4 h-4" />
+          <span>Customize Booking</span>
+        </motion.button>
+      </div>
+
       {/* Week Navigation */}
       <div className="flex items-center justify-between">
         <motion.button
@@ -154,11 +270,9 @@ function BookingPage() {
         >
           <SafeIcon icon={FiChevronLeft} className="w-5 h-5" />
         </motion.button>
-        
         <h3 className="text-lg font-semibold text-gray-900">
           {format(currentWeek, 'MMMM yyyy')}
         </h3>
-        
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
@@ -171,15 +285,14 @@ function BookingPage() {
 
       {/* Date Selection */}
       <div className="grid grid-cols-7 gap-2">
-        {weekDays.map((date, index) => {
-          const isDisabled = isBefore(date, startOfDay(new Date()));
+        {weekDays.map(({ date, enabled }, index) => {
+          const isDisabled = isBefore(date, startOfDay(new Date())) || !enabled;
           const isSelected = selectedDate && isSameDay(date, selectedDate);
-          
           return (
             <motion.button
               key={date.toISOString()}
               initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: enabled ? 1 : 0.4, y: 0 }}
               transition={{ delay: index * 0.1 }}
               onClick={() => !isDisabled && handleDateSelect(date)}
               disabled={isDisabled}
@@ -209,7 +322,6 @@ function BookingPage() {
           <h4 className="text-lg font-semibold text-gray-900">
             Available times for {format(selectedDate, 'EEEE, MMMM d')}
           </h4>
-          
           <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {timeSlots.map((slot, index) => (
               <motion.button
@@ -231,7 +343,6 @@ function BookingPage() {
               </motion.button>
             ))}
           </div>
-          
           {timeSlots.filter(slot => slot.available).length === 0 && (
             <div className="text-center py-8">
               <SafeIcon icon={FiClock} className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -270,6 +381,9 @@ function BookingPage() {
             <p className="text-sm text-blue-700">
               {format(selectedDate, 'EEEE, MMMM d')} at {format(selectedTime, 'h:mm a')} ({meetingType.duration} minutes)
             </p>
+            <p className="text-sm text-blue-700 mt-1">
+              Via {customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone' ? 'Phone Call' : 'Google Meet'}
+            </p>
           </div>
         </div>
       </div>
@@ -287,7 +401,6 @@ function BookingPage() {
             required
           />
         </div>
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Email Address *
@@ -304,14 +417,20 @@ function BookingPage() {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Phone Number
+          Phone Number {(customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone') ? '*' : ''}
         </label>
         <input
           type="tel"
           value={formData.guestPhone}
           onChange={(e) => handleFormChange('guestPhone', e.target.value)}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          required={customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone'}
         />
+        {(customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone') && (
+          <p className="text-sm text-gray-500 mt-1">
+            Required for phone meetings. You will receive a call at this number at the scheduled time.
+          </p>
+        )}
       </div>
 
       {/* Custom Questions */}
@@ -371,7 +490,12 @@ function BookingPage() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={handleSubmit}
-          disabled={!formData.guestName || !formData.guestEmail || isSubmitting}
+          disabled={
+            !formData.guestName || 
+            !formData.guestEmail || 
+            ((customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone') && !formData.guestPhone) || 
+            isSubmitting
+          }
           className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'Scheduling...' : 'Schedule Meeting'}
@@ -390,12 +514,10 @@ function BookingPage() {
       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
         <SafeIcon icon={FiCheck} className="w-10 h-10 text-green-600" />
       </div>
-      
       <div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Meeting Scheduled!</h2>
         <p className="text-gray-600">Your meeting has been successfully scheduled.</p>
       </div>
-
       <div className="bg-gray-50 rounded-lg p-6 text-left max-w-md mx-auto">
         <h3 className="font-semibold text-gray-900 mb-4">Meeting Details</h3>
         <div className="space-y-3 text-sm">
@@ -415,15 +537,28 @@ function BookingPage() {
             <SafeIcon icon={FiMail} className="w-4 h-4 text-gray-500" />
             <span>{formData.guestEmail}</span>
           </div>
+          <div className="flex items-center space-x-3">
+            <SafeIcon 
+              icon={customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone' ? FiPhone : FiVideo} 
+              className="w-4 h-4 text-gray-500" 
+            />
+            <span>
+              {customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone' 
+                ? 'Phone Call' 
+                : 'Google Meet'}
+            </span>
+          </div>
         </div>
       </div>
-
       <div className="text-sm text-gray-600 space-y-2">
         <p>📧 A confirmation email has been sent to {formData.guestEmail}</p>
         <p>📅 The meeting has been added to your calendar</p>
-        <p>🔗 Meeting link will be included in the confirmation email</p>
+        {(customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone') ? (
+          <p>📞 You will receive a phone call at the scheduled time</p>
+        ) : (
+          <p>🔗 Meeting link will be included in the confirmation email</p>
+        )}
       </div>
-
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
@@ -460,8 +595,15 @@ function BookingPage() {
                 <span>{meetingType.duration} minutes</span>
               </div>
               <div className="flex items-center space-x-1">
-                <SafeIcon icon={FiCalendar} className="w-4 h-4" />
-                <span className="capitalize">{meetingType.meetingPlatform.replace('-', ' ')}</span>
+                <SafeIcon 
+                  icon={customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone' ? FiPhone : FiVideo} 
+                  className="w-4 h-4" 
+                />
+                <span className="capitalize">
+                  {customMeetingType === 'phone' || meetingType.meetingPlatform === 'phone' 
+                    ? 'Phone Call' 
+                    : meetingType.meetingPlatform.replace('-', ' ')}
+                </span>
               </div>
             </div>
           </div>
@@ -470,23 +612,31 @@ function BookingPage() {
           {step !== 'confirmation' && (
             <div className="flex items-center justify-center mb-8">
               <div className="flex items-center space-x-4">
-                <div className={`flex items-center space-x-2 ${
-                  step === 'datetime' ? 'text-blue-600' : 'text-gray-400'
-                }`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    step === 'datetime' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                  }`}>
+                <div
+                  className={`flex items-center space-x-2 ${
+                    step === 'datetime' ? 'text-blue-600' : 'text-gray-400'
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      step === 'datetime' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                    }`}
+                  >
                     1
                   </div>
                   <span className="text-sm font-medium">Date & Time</span>
                 </div>
                 <div className="w-12 h-0.5 bg-gray-200" />
-                <div className={`flex items-center space-x-2 ${
-                  step === 'details' ? 'text-blue-600' : 'text-gray-400'
-                }`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    step === 'details' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                  }`}>
+                <div
+                  className={`flex items-center space-x-2 ${
+                    step === 'details' ? 'text-blue-600' : 'text-gray-400'
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      step === 'details' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                    }`}
+                  >
                     2
                   </div>
                   <span className="text-sm font-medium">Your Details</span>
@@ -511,6 +661,16 @@ function BookingPage() {
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* Flexible Booking Form Modal */}
+      <AnimatePresence>
+        {showFlexibleForm && (
+          <FlexibleBookingForm
+            onSubmit={handleFlexibleBookingSubmit}
+            onCancel={() => setShowFlexibleForm(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

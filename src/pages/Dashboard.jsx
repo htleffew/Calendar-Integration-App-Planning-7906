@@ -1,14 +1,16 @@
 import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useScheduling } from '../context/SchedulingContext';
 import SafeIcon from '../common/SafeIcon';
 import * as FiIcons from 'react-icons/fi';
 
-const { FiCalendar, FiUsers, FiClock, FiTrendingUp, FiPlus, FiEdit3 } = FiIcons;
+const { FiCalendar, FiUsers, FiClock, FiTrendingUp, FiPlus, FiEdit3, FiSliders } = FiIcons;
 
 function Dashboard() {
-  const { meetingTypes, bookings, settings } = useScheduling();
-
+  const { meetingTypes, bookings, settings, dispatch } = useScheduling();
+  const navigate = useNavigate();
+  
   const stats = [
     {
       name: 'Total Bookings',
@@ -41,6 +43,26 @@ function Dashboard() {
   ];
 
   const recentBookings = bookings.slice(-5).reverse();
+
+  const handleCreateMeetingType = () => {
+    // Navigate to meeting types page and set a flag in sessionStorage to open form
+    sessionStorage.setItem('openMeetingTypeForm', 'true');
+    navigate('/meeting-types');
+  };
+
+  const handleConnectGoogleCalendar = () => {
+    navigate('/settings');
+    // Set active tab to calendar in sessionStorage
+    sessionStorage.setItem('settingsActiveTab', 'calendar');
+  };
+
+  const handleConfigureRules = () => {
+    navigate('/rules');
+  };
+
+  const handleFlexibleBooking = () => {
+    navigate('/book/custom');
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -90,7 +112,6 @@ function Dashboard() {
               <h2 className="text-xl font-semibold text-gray-900">Recent Bookings</h2>
               <SafeIcon icon={FiCalendar} className="w-5 h-5 text-gray-400" />
             </div>
-            
             <div className="space-y-4">
               {recentBookings.length > 0 ? (
                 recentBookings.map((booking, index) => (
@@ -128,11 +149,21 @@ function Dashboard() {
               <h2 className="text-xl font-semibold text-gray-900">Quick Actions</h2>
               <SafeIcon icon={FiEdit3} className="w-5 h-5 text-gray-400" />
             </div>
-            
             <div className="space-y-4">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={handleFlexibleBooking}
+                className="w-full flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
+              >
+                <SafeIcon icon={FiSliders} className="w-5 h-5 text-purple-600" />
+                <span className="text-gray-900 font-medium">Flexible Booking</span>
+              </motion.button>
+              
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleCreateMeetingType}
                 className="w-full flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors"
               >
                 <SafeIcon icon={FiPlus} className="w-5 h-5 text-blue-600" />
@@ -142,6 +173,7 @@ function Dashboard() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={handleConnectGoogleCalendar}
                 className="w-full flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:border-green-300 hover:bg-green-50 transition-colors"
               >
                 <SafeIcon icon={FiCalendar} className="w-5 h-5 text-green-600" />
@@ -151,6 +183,7 @@ function Dashboard() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={handleConfigureRules}
                 className="w-full flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50 transition-colors"
               >
                 <SafeIcon icon={FiEdit3} className="w-5 h-5 text-purple-600" />
